@@ -3,9 +3,16 @@
   const state = { matrix: null, width: 0, height: 0, blob: null, blur: "none", kernel: "edge", convMode: "convolution", convType: "normal", convResult: null, convMap: { cols: 0, rows: 0 }, convRun: 0, scanning: false, poolKind: "max", poolResult: null, poolMap: { cols: 0, rows: 0 }, poolRun: 0, poolScanning: false, bound: false, sampleX: 0, sampleY: 0, channel: { red: true, green: true, blue: true } };
   const dbReady = new Promise((resolve) => {
     if (!window.indexedDB) return resolve(null);
-    const request = indexedDB.open("pixel-foundations", 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("images", { keyPath: "id" });
-    request.onsuccess = () => resolve(request.result);
+    const request = indexedDB.open("pixel-foundations", 2);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "id" });
+    };
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => resolve(null);
   });
   const kernels = {

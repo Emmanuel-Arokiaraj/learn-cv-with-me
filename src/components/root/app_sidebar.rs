@@ -28,7 +28,7 @@ pub fn AppSidebar() -> Element {
                                         alt: "Learn CV with Me logo",
                                         style: "width:1.5rem; height:1.5rem; object-fit:contain;",
                                     }
-                                    span { "CV Image Studio" }
+                                    span { "CV Playground" }
                                 }
                             },
                         }

@@ -22,7 +22,7 @@ pub fn navbar_component() -> Element {
                         alt: "Learn CV with Me logo",
                         class: "h-8 w-8 object-contain",
                     }
-                    span { "learn-cv-with-me" }
+                    span { "Learn CV with Emmanuel" }
                 }
                 div {
                     class: "flex items-center gap-2",

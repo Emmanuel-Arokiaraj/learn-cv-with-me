@@ -329,6 +329,35 @@
     }
     return { frames: out, W, H };
   }
+  function saveVideoToIndexedDb(file) {
+    return new Promise((resolve) => {
+      if (!window.indexedDB) return resolve(false);
+      const open = indexedDB.open("pixel-foundations", 2);
+      open.onupgradeneeded = () => {
+        const db = open.result;
+        if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "id" });
+      };
+      open.onerror = () => resolve(false);
+      open.onblocked = () => resolve(false);
+      open.onsuccess = () => {
+        const db = open.result;
+        db.onversionchange = () => db.close();
+        if (!db.objectStoreNames.contains("videos")) { db.close(); return resolve(false); }
+        let tx;
+        try {
+          tx = db.transaction("videos", "readwrite");
+          tx.objectStore("videos").put({ id: "latest", blob: file, name: file.name, type: file.type, size: file.size, lastModified: file.lastModified, savedAt: Date.now() });
+          tx.oncomplete = () => { db.close(); resolve(true); };
+          tx.onerror = tx.onabort = () => { db.close(); resolve(false); };
+        } catch (_) {
+          db.close();
+          resolve(false);
+        }
+      };
+    });
+  }
+
   async function loadVideo(file) {
     if (!file) return;
     msg(""); if (!file.type.startsWith("video/")) return msg("That file is not a video.", true);
@@ -336,6 +365,7 @@
     const url = URL.createObjectURL(file), v = document.createElement("video"); v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
     try { await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error("The browser could not read this video.")); }); } catch (e) { return msg(e.message, true); }
     if (!isFinite(v.duration) || v.duration > 10.05) return msg(`Too long: ${isFinite(v.duration) ? v.duration.toFixed(1) : "?"} s. Please upload a video shorter than 10 seconds.`, true);
+    const savedLocally = await saveVideoToIndexedDb(file);
     const N = clamp(Math.ceil(v.duration * 10), 2, 30), W = 160, H = clamp(Math.round(((W * v.videoHeight) / v.videoWidth) / 16) * 16, 16, 112), frames = [];
     const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
     msg("Sampling frames…"); setBar(0);
@@ -343,7 +373,7 @@
       await new Promise((r) => { let done = false; const fin = () => { if (!done) { done = true; r(); } }; v.onseeked = fin; v.currentTime = Math.min(v.duration - 0.01, ((i + 0.5) * v.duration) / N); setTimeout(fin, 2500); });
       x.drawImage(v, 0, 0, W, H); frames.push(new Uint8ClampedArray(x.getImageData(0, 0, W, H).data)); setBar((i + 1) / N);
     }
-    URL.revokeObjectURL(url); msg(`Loaded ${v.duration.toFixed(1)} s, ${(file.size / 1048576).toFixed(2)} MB.`);
+    URL.revokeObjectURL(url); msg(`Loaded ${v.duration.toFixed(1)} s, ${(file.size / 1048576).toFixed(2)} MB.${savedLocally ? " Saved in this browser." : " Could not save in this browser."}`);
     setFrames(frames, W, H, N / v.duration, file.name);
   }
 

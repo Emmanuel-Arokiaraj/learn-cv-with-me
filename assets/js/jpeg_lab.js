@@ -598,13 +598,37 @@
     S.pix = [Math.floor(imgData.width / 2), Math.floor(imgData.height / 2)];
     runAll(true); renderPixel(true);
   }
+  function saveUploadedImage(canvas, imgData, file) {
+    if (!window.indexedDB) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const open = indexedDB.open("pixel-foundations", 2);
+      open.onupgradeneeded = () => {
+        const db = open.result;
+        if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "id" });
+      };
+      open.onsuccess = () => {
+        const db = open.result;
+        db.onversionchange = () => db.close();
+        if (!db.objectStoreNames.contains("images")) { db.close(); return; }
+        const tx = db.transaction("images", "readwrite");
+        tx.objectStore("images").put({ id: "latest", blob, name: file.name, type: file.type, width: imgData.width, height: imgData.height, matrix: imgData.data.slice(), savedAt: Date.now() });
+        tx.oncomplete = () => db.close();
+        tx.onerror = tx.onabort = () => db.close();
+      };
+    }, "image/png");
+  }
   function loadFile(file) {
     if (!file || !file.type.startsWith("image/")) return;
     createImageBitmap(file).then((bm) => {
       const sc = Math.min(1, MAXDIM / Math.max(bm.width, bm.height)), w = Math.max(8, Math.round(bm.width * sc)), h = Math.max(8, Math.round(bm.height * sc));
       const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); x.drawImage(bm, 0, 0, w, h);
-      setImage(x.getImageData(0, 0, w, h), file.name);
-    });
+      const pixels = x.getImageData(0, 0, w, h);
+      setImage(pixels, file.name);
+      saveUploadedImage(c, pixels, file);
+      bm.close();
+    }).catch(() => { const meta = $("jpeg-meta"); if (meta) meta.textContent = "Could not decode this image."; });
   }
   function canvasPoint(canvas, e) {
     const r = canvas.getBoundingClientRect();
@@ -647,9 +671,13 @@
     // start from stored image of the operations page if present, else sample
     const done = (d, l) => setImage(d, l);
     try {
-      const open = window.indexedDB && indexedDB.open("pixel-foundations", 1);
+      const open = window.indexedDB && indexedDB.open("pixel-foundations", 2);
       if (!open) throw 0;
-      open.onupgradeneeded = () => { open.transaction.abort(); };
+      open.onupgradeneeded = () => {
+        const db = open.result;
+        if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "id" });
+      };
       open.onerror = () => done(sampleImage(), "Sample image");
       open.onsuccess = () => {
         const db = open.result;
